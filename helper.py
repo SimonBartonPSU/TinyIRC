@@ -3,7 +3,7 @@ import sys
 import os
 import json
 
-accepted_commands = ["$$create", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$whoami", "$$send"]
+accepted_commands = ["$$whoami", "$$create", "$$delete", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$send"]
 
 # Validate input client side to save server work
 def interpret_lobby_message(message):

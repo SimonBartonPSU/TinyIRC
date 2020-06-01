@@ -164,6 +164,9 @@ class Server:
             if first == "$$create":
                 msg = "Must specify a room name argument to execute $$create! [E.g. $$create pokemon]"
                 print("User did not specify roomname to create")
+            if first == "$$delete":
+                msg = "Must specify a room to delete!"
+                print("User did not specify room to delte...")
             if first == "$$send":
                 msg = "Must specify a room to send your message for $$send [E.g. $$send pokemon]!"
                 print("User did not specify a room to send a message to")
