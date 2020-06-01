@@ -79,13 +79,38 @@ class Server:
         Save state on interrupt crash and cleanup sockets
         """
         print('You pressed Ctrl+C!')
-        print('Saving config and closing all sockets...')
-        for _socket in self.clients:
-            self.pp.pprint(_socket)
-            _socket.close()
-        self.save_config()
-        print('Exiting, good')
-        sys.exit(0)
+        response = input("Would you like to terminate a user session? [y/n] ")
+        trying = 'y'
+        if response.lower() == 'y':
+            while trying.lower() == 'y':
+                print("Choose a user to remove:\n")
+                msg = ''
+                for client in self.clients:
+                    msg += client['data'] + '\n'
+                print(msg)
+                response = input("Enter user to remove: ")
+                for client in self.clients:
+                    if client['data'] == response:
+                        msg = f"Booting client {client['data']} from server..."
+                        self.log_and_send(client, msg)
+                        del self.clients[client]
+                        print("Client booted.")
+                        return
+                trying = input("No matching client found. Try again? [y/n] ")
+
+        response = input("Save config? [y/n] ")
+
+        if response.lower() == 'y':
+            print('Saving config and closing all sockets...')
+            for _socket in self.clients:
+                self.pp.pprint(_socket)
+                _socket.close()
+            self.save_config()
+        
+        response = input("Terminate server session? [y/n] ")
+        if response.lower() == 'y':
+            print('Exiting, good')
+            sys.exit(0)
 
 
     def handle_exceptions(self, exception_sockets):
@@ -299,14 +324,15 @@ class Server:
             client_socket.send(bytes(msg, 'utf-8'))
             return
         else:
+            # List all rooms and members
             roomname = words[1]
             if roomname == "all":
                 user = self.clients[client_socket]['data'].decode('utf-8')
                 msg = f'All rooms and users:\n'
                 for room in self.rooms:
-                    msg += f'\tRoom: {room.name}\nUsers: '
+                    msg += f'Room: {room.name}\nUsers: '
                     for user in room.room_attrbts['members']:
-                        msg += f'\t\t{user}'
+                        msg += f'\t{user}'
                         if user in room.room_attrbts['admins']:
                             msg += ' - Admin'
                         msg += '\n'
@@ -331,9 +357,10 @@ class Server:
             for _room in self.rooms:
                 if _room.name == roomname:
                     print("Request roomname found..")
-                    msg = f'User members of room {roomname}: '
+                    msg = f'User members of room {roomname}:\n'
                     for member in _room.room_attrbts['members']:
                         msg += f'\t\t{member}\n'
+                    msg+= '\n'
                     client_socket.send(bytes(msg, 'utf-8'))
                     
                     msg = 'Users active in room:\n'
@@ -347,6 +374,11 @@ class Server:
                 return
     
     def handle_send_to_room(self, lobby_command, client_socket):
+        """
+        Fundamental algorithm for distributing messages to other clients.
+        Look for the matching room, then send the message to any users who
+        are members of that room.
+        """
         words = lobby_command.split()
         sent_name = words[1]
         user = self.clients[client_socket]['data'].decode('utf-8')

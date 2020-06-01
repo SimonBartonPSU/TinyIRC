@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import pprint
+import time
 from helper import check_for_config, lobby_welcome, end_session, interpret_lobby_message
 
 HEADER_LENGTH = 10
@@ -23,6 +24,7 @@ class Client:
         self.username = ''
         self.entered = False
         self.entered_channel = ''
+        self.ticker = 0
         self.config = {'username':'','rooms':[]}
 
         # Look for config, or setup username if no config
@@ -48,14 +50,14 @@ class Client:
         self.client_socket.send(bytes(msg, 'utf-8'))
         lobby_welcome()
         while True:
-            prompt = f"{self.username.decode('utf-8')} > "
-            if self.entered:
-                prompt += self.entered_channel + ' : '
-            message = input(prompt)
+            if self.ticker % 2 == 0:
+                prompt = f"{self.username.decode('utf-8')} > "
+                if self.entered:
+                    prompt += self.entered_channel + ' : '
+                message = input(prompt)
 
             if message:
                 first_word = message.split()[0]
-            # If user actually typed something in and it's a valid command, send it
                 if message == "$$$end":
                     end_session(self)
                 elif first_word == "$$help" or first_word == "$$send":
@@ -64,6 +66,7 @@ class Client:
                     print(f"Exiting active mode in channel {self.entered_channel}")
                     self.entered = False
                     self.entered_channel = ''
+                    self.client_socket.send(message)
                 elif (self.entered and message) or interpret_lobby_message(message):
                     split_message = message.split()
                     if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
@@ -79,6 +82,7 @@ class Client:
                     message = message.encode('utf-8')
                     message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
                     self.client_socket.send(message_header + message)
+                    time.sleep(0.1)
                 
             try:
                 while True:
@@ -92,6 +96,7 @@ class Client:
                         if recvd.split()[-1] == "NONACTIVE":
                             self.entered = False
                             self.entered_channel = ''
+                self.ticker += 1
                     
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:

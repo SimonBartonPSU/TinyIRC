@@ -19,13 +19,12 @@ def interpret_lobby_message(message):
     if command[:2] != '$$':
         print("Unknown lobby input, please enter a valid command.")
         print("$$help can display available commands.\n")
-        print(f"We received command {command}\n")
+        #Debugging print(f"We received command {command}\n")
         return None
     elif command == "$$help":
         print("Available commands:")
         print("$$whoami -- Echo your current identity")
         print("$$create [room name] -- Creates a new chat room with specified name")
-        # TODO
         print("$$delete [room name] -- Allows a room Admin to delete a specified room")
         print("$$join [room name] -- Add yourself to room membership, if possible")
         print("$$leave [room name] -- Remove yourself from room membership, if possible")
