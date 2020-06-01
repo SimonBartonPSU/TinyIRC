@@ -19,6 +19,7 @@ def interpret_lobby_message(message):
     if command[:2] != '$$':
         print("Unknown lobby input, please enter a valid command.")
         print("$$help can display available commands.\n")
+        print(f"We received command {command}\n")
         return None
     elif command == "$$help":
         print("Available commands:")
@@ -28,7 +29,7 @@ def interpret_lobby_message(message):
         print("$$delete [room name] -- Allows a room Admin to delete a specified room")
         print("$$join [room name] -- Add yourself to room membership, if possible")
         print("$$leave [room name] -- Remove yourself from room membership, if possible")
-        print("$$list [room name|mine] -- Without an argument, lists available rooms\nwith an argument, list users in specified room or rooms you've joined")
+        print("$$list [room name|mine|all] -- Without an argument, lists available rooms\nwith an argument, list users in specified room or \nrooms you've joined or all rooms with members")
         print("$$enter [room name] -- Enter an active session in a room, all messages will be directed to this room")
         print("$$exit -- Exit an active room session, messages will default to lobby")
         print("$$$end -- Note three dollar signs, this will end the client session entirely\n")

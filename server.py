@@ -161,25 +161,19 @@ class Server:
         # Catch initial errors
         if len(words) == 1:
             msg = ''
-            if first == "$$create":
-                msg = "Must specify a room name argument to execute $$create! [E.g. $$create pokemon]"
-                print("User did not specify roomname to create")
-            if first == "$$delete":
-                msg = "Must specify a room to delete!"
-                print("User did not specify room to delte...")
-            if first == "$$send":
+            if first == "$$create" or first == "$$delete":
+                msg = "Must specify a room name argument to execute $$create or $$delete! [E.g. $$create pokemon]"
+                print("User did not specify roomname to create or delete")
+            elif first == "$$send":
                 msg = "Must specify a room to send your message for $$send [E.g. $$send pokemon]!"
                 print("User did not specify a room to send a message to")
-            if first == "$$join":
-                msg = "Must specify a room name argument to execute $$join! [E.g. $$join pokemon]"
-                print("User did not specify roomname to join")
-            if first == "$$leave":
-                msg = "Must specify a room name argument to execute $$leave! [E.g. $$leave pokemon]"
-                print("User did not specify roomname to leave")
-            if first == "$$enter":
-                msg = "Must specify a room name argument to execute $$enter! [E.g. $$enter pokemon]"
+            elif first == "$$join" or first == "$$leave":
+                msg = "Must specify a room name argument to execute $$join or $$leave! [E.g. $$join pokemon]"
+                print("User did not specify roomname to join or leave")
+            elif first == "$$enter" or first == "$$exit":
+                msg = "Must specify a room name argument to execute $$enter or $$exit! [E.g. $$enter pokemon]"
                 print("User did not specify roomname to enter")
-            if msg != '':
+            elif msg != '':
                 client_socket.send(bytes(msg, 'utf-8'))
                 return
 
@@ -197,6 +191,8 @@ class Server:
             self.handle_send_to_room(lobby_command, client_socket)
         elif first == "$$enter":
             self.handle_enter_room_session(lobby_command, client_socket)
+        elif first == "$$exit":
+            self.handle_exit_room_session(lobby_command, client_socket)
         elif first == "$$whoami":
             self.handle_whoami(client_socket)
         else:
@@ -226,13 +222,25 @@ class Server:
                 return
 
         self.rooms.append(Room(name=roomname, creator=user))
-        msg = f"Room {roomname} created for client {user}."
+        msg = f"Room {roomname} created for client {user} (creator/Admin)."
         self.log_and_send(client_socket, msg)
         return
     
 
     def handle_delete_room(self, lobby_command, client_socket):
-        pass
+        user = self.clients[client_socket]['data'].decode('utf-8')
+        roomname = lobby_command.split()[1]
+        msg = f"Handling room deletion of {roomname} by {user}"
+        print(msg)
+        for _room in self.rooms:
+            if _room.name == roomname and user in _room.room_attrbts['admins']:
+                msg = f"Room {roomname} is being deleted by admin {user}"
+                self.rooms.remove(_room)
+                self.log_and_send(client_socket, msg)
+                return
+        msg = f"Room {roomname} was not found or user is not permitted to delete"
+        self.log_and_send(client_socket, msg)
+
 
 
     def handle_join_room(self, lobby_command, client_socket):
@@ -285,20 +293,37 @@ class Server:
         words = lobby_command.split()
         # List all rooms
         if len(words) == 1:
-            msg = 'Available Rooms: '
+            msg = 'Available Rooms:\n'
             for room in self.rooms:
-                msg += f'{room.name}\n'
+                msg += f'\t\t{room.name}\n'
             client_socket.send(bytes(msg, 'utf-8'))
             return
         else:
             roomname = words[1]
+            if roomname == "all":
+                user = self.clients[client_socket]['data'].decode('utf-8')
+                msg = f'All rooms and users:\n'
+                for room in self.rooms:
+                    msg += f'\tRoom: {room.name}\nUsers: '
+                    for user in room.room_attrbts['members']:
+                        msg += f'\t\t{user}'
+                        if user in room.room_attrbts['admins']:
+                            msg += ' - Admin'
+                        msg += '\n'
+                    msg += '\n'
+                client_socket.send(bytes(msg, 'utf-8'))
+                return
+
             # List user's room membership
             if roomname == "mine":
                 user = self.clients[client_socket]['data'].decode('utf-8')
                 msg = f'Rooms user {user} has joined:\n'
                 for room in self.rooms:
                     if user in room.room_attrbts['members']:
-                        msg += f'{room.name}\n'
+                        msg += f'\t\t{room.name}'
+                    if user in room.room_attrbts['admins']:
+                        msg += ' - Admin'
+                    msg += '\n'
                 client_socket.send(bytes(msg, 'utf-8'))
                 return
             
@@ -308,13 +333,12 @@ class Server:
                     print("Request roomname found..")
                     msg = f'User members of room {roomname}: '
                     for member in _room.room_attrbts['members']:
-                        msg += f'{member}, '
-                    msg.rstrip(', ')
+                        msg += f'\t\t{member}\n'
                     client_socket.send(bytes(msg, 'utf-8'))
                     
-                    msg = 'Users active in room: '
+                    msg = 'Users active in room:\n'
                     for active_user in _room.room_attrbts['active']:
-                        msg += f'{active_user}\n'
+                        msg += f'\t\t{active_user}\n'
                     client_socket.send(bytes(msg, 'utf-8'))
                     return
             if msg == '':
@@ -344,11 +368,32 @@ class Server:
         return
 
     def handle_enter_room_session(self, lobby_command, client_socket):
-        #small TODO
-        # if room doesnt have its own socket, set it up and have client join
-        # else have client join existing room socket
-        pass
+        words = lobby_command.split()
+        sent_name = words[1]
+        user = self.clients[client_socket]['data'].decode('utf-8')
+        for room in self.rooms:
+            if room.name == sent_name and user in room.room_attrbts['members']:
+                room.room_attrbts['active'].add(user)
+                msg = f'User {user} is a member of room {sent_name}. Entering user into active mode for this room. ACTIVE'
+                print(msg)
+                return
+        msg = f'Room {sent_name} not found or user {user} is not yet a member. NONACTIVE'
+        self.log_and_send(client_socket, msg)
+        return
 
+    def handle_exit_room_session(self, lobby_command, client_socket):
+        words = lobby_command.split()
+        sent_name = words[1]
+        user = self.clients[client_socket]['data'].decode('utf-8')
+        for room in self.rooms:
+            if room.name == sent_name and user in room.room_attrbts['active']:
+                room.room_attrbts['active'].remove(user)
+                msg = f'User {user} is no longer active in room {sent_name}.'
+                print(msg)
+                return
+        msg = f'Room {sent_name} not found or user {user} is not yet a member. NONACTIVE'
+        self.log_and_send(client_socket, msg)
+        return
 
     def run(self):
         print("Central server now listening...")
