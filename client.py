@@ -5,9 +5,8 @@ import re
 import os
 import signal
 import sys
-import json
 import pprint
-from helper import lobby_welcome, print_response
+from helper import check_for_config, lobby_welcome, end_session, interpret_lobby_message
 
 HEADER_LENGTH = 10
 
@@ -25,70 +24,46 @@ class Client:
         self.config = {'username':'','rooms':[]}
 
         # Look for config, or setup username if no config
-        def check_for_config(self):
-            try:
-                path = os.environ.get('HOME') + '/.tiny'
-                if os.path.exists(path):
-                    with open(path) as f:
-                        self.config = json.load(f)
-                    self.username = self.config['username']
-                    return True
-                else:
-                    return False
-            except Exception as e:
-                print("Exception occured while loading client config... {0}".format(e))
-
         if check_for_config(self):
             print("Config file detected and loaded successfully. Welcome back, {0}".format(self.username))
         else:
             print("No config file detected... Please setup your name.")
-            while not self.username.isalpha():
-                self.username = input("Please enter alphabetical username: ").encode('utf-8')
+            while not self.username.isalpha() or len(self.username) > 30:
+                self.username = input("Please enter alphabetical username of 30 characters or less: ").encode('utf-8')
             self.config['username'] = self.username.decode('utf-8')
     
 
-    def save_config(self):
-        try:
-            path = os.environ.get('HOME') + '/.tiny'
-            with open(path, 'w') as f:
-                json.dump(self.config, f)
-        except Exception as e:
-            print("Error saving config!! {0}".format(e))
-
     # Handle ctrl+C crash
     def signal_handler(self, sig, frame):
-        print('You pressed Ctrl+C! Saving config to $HOME/.tiny')
-        self.save_config()
+        print('You pressed Ctrl+C! Config will not be saved!')
         sys.exit(0)
 
 
     def run(self):
         # Tell server our username len
         username_header = f"{len(self.username):<{HEADER_LENGTH}}"
-        self.client_socket.send(username_header.encode('utf-8') + self.username)
+        msg = username_header + self.username.decode('utf-8')
+        self.client_socket.send(bytes(msg, 'utf-8'))
         lobby_welcome()
         while True:
-            message = input(f"{self.username} > ")
 
-            if message:
+            message = input(f"{self.username.decode('utf-8')} > ")
+
+            # If user actually typed something in and it's a valid command, send it
+            if message == "$$$end":
+                end_session(self)
+            elif interpret_lobby_message(message):
                 message = message.encode('utf-8')
                 message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
                 self.client_socket.send(message_header + message)
-
+                
+            # handle response 1K at a time
             try:
                 while True:
-                    username_header = self.client_socket.recv(HEADER_LENGTH)
-                    if not len(username_header):
-                        print("connection closed by the server")
-                        sys.exit()
-
-                    username_length = int(username_header.decode('utf-8'))
-                    username = self.client_socket.recv(username_length).decode('utf-8')
-
-                    message_header = self.client_socket.recv(HEADER_LENGTH)
-                    message_length = int(message_header.decode('utf-8').strip())
-                    message = self.client_socket.recv(message_length).decode('utf-8')
-                    print(f"{username}: {message}")
+                    data = self.client_socket.recv(1024)
+                    if not data:
+                        break
+                    print(data.decode('utf-8'))
 
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
@@ -100,9 +75,7 @@ class Client:
                 print('General error', str(e))
                 sys.exit
 
-#try:
+
 c = Client()
 signal.signal(signal.SIGINT, c.signal_handler)
 c.run()
-#except Exception as e:
- #   print("Exception occured during client operation... {0}".format(e))
