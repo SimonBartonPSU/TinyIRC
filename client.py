@@ -61,8 +61,9 @@ class Client:
             try:
                 while True:
                     data = self.client_socket.recv(1024)
+                    # Lost conn to server
                     if not data:
-                        break
+                        sys.exit
                     print(data.decode('utf-8'))
 
             except IOError as e:

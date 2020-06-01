@@ -2,6 +2,9 @@ import socket
 import select
 import signal
 import sys
+import os
+import json
+import jsonpickle
 import pprint
 
 HEADER_LENGTH = 10
@@ -17,6 +20,7 @@ class Room:
         self.room_attrbts = {'topic' : topic, 
                         'creator': creator,
                         'members': { creator },
+                        'active': set(),
                         'admins': [creator]}
 
 class Server:
@@ -34,7 +38,46 @@ class Server:
         self.server_listen_socket.listen()
         self.sockets_list = [self.server_listen_socket]
 
+        def load_config(self):
+            """
+            If a config file exists, load it always on server
+            """
+            try:
+                path = os.environ.get('HOME') + '/.tinyserver'
+                if os.path.exists(path):
+                    with open(path) as f:
+                        JSON = json.load(f)
+                        self.rooms = jsonpickle.decode(JSON)
+                print('Config loaded')
+                
+            except Exception as e:
+                print("Error while loading server config {0}".format(e))
+
+        load_config(self)
+
+    def save_config(self):
+        """
+        Save server state and print helpful info.
+        """
+        try:
+            print('Saving config...')
+            print("Known clients:")
+            self.pp.pprint(self.clients)
+            print("Known rooms:")
+            for room in self.rooms: 
+                self.pp.pprint(room.name)
+                self.pp.pprint(room.room_attrbts)
+            path = os.environ.get('HOME') + '/.tinyserver'
+            roomJSON = jsonpickle.encode(self.rooms)
+            with open(path, 'w') as f:
+                json.dump(roomJSON, f)
+        except Exception as e:
+            print("Error saving config!! {0}".format(e))
+
     def receive_message(self, client_socket):
+        """
+        Receive a message from a client socket
+        """
         try:
             message_header = client_socket.recv(HEADER_LENGTH)
 
@@ -47,17 +90,17 @@ class Server:
         except:
             return False
 
-
-    # Handle ctrl+C crash
     def signal_handler(self, sig, frame):
-        print('You pressed Ctrl+C! Woow')
-        print('need to save a config when ctrlC hit by server ...')
-        print("Known clients:")
-        self.pp.pprint(self.clients)
-        print("Known rooms:")
-        for room in self.rooms: 
-            self.pp.pprint(room.name)
-            self.pp.pprint(room.room_attrbts)
+        """
+        Save state on interrupt crash and cleanup sockets
+        """
+        print('You pressed Ctrl+C!')
+        print('Saving config and closing all sockets...')
+        for _socket in self.clients:
+            self.pp.pprint(_socket)
+            _socket.close()
+        self.save_config()
+        print('Exiting, good')
         sys.exit(0)
 
 
@@ -127,7 +170,9 @@ class Server:
                 return
 
         if first == "$$create":
-            self.handle_room_create(lobby_command, client_socket)
+            self.handle_create_room(lobby_command, client_socket)
+        elif first == "$$delete":
+            self.handle_delete_room(lobby_command, client_socket)
         elif first == "$$join":
             self.handle_join_room(lobby_command, client_socket)
         elif first == "$$leave":
@@ -147,23 +192,34 @@ class Server:
         msg = 'You are currently user {0}'.format(user)
         client_socket.send(bytes(msg, 'utf-8'))
 
-    def handle_room_create(self, lobby_command, client_socket):
+    def handle_create_room(self, lobby_command, client_socket):
         msg = "Handling room creation of {0}".format(lobby_command)
         print(msg)
+        user = self.clients[client_socket]['data'].decode('utf-8')
         roomname = lobby_command.split()[1]
+
+        if roomname == "mine":
+            msg = f'Client {user} error! "mine" is a reserved word that cannot be a room name.'
+            print(msg)
+            client_socket.send(bytes(msg, 'utf-8'))
+            return
+
         for room in self.rooms:
             if room.name == roomname:
                 msg = "Invalid request from client: {0} already exists!".format(roomname)
                 client_socket.send(bytes(msg, 'utf-8'))
                 print(msg)
                 return
-        
-        user = self.clients[client_socket]['data'].decode('utf-8')
+
         print("Creator of room will be {0}".format(user))
         self.rooms.append(Room(name=roomname, creator=user))
         client_socket.send(bytes("Room {0} created!".format(roomname), 'utf-8'))
         print("Created room for client. Response sent.")
         return
+    
+
+    def handle_delete_room(self, lobby_command, client_socket):
+        pass
 
 
     def handle_join_room(self, lobby_command, client_socket):
@@ -221,29 +277,51 @@ class Server:
         print("Handling list command...")
         msg = ''
         words = lobby_command.split()
+        # List all rooms
         if len(words) == 1:
             msg = 'Available Rooms: '
             for room in self.rooms:
-                msg += '{0}, '.format(room.name)
+                msg += '{0}\n'.format(room.name)
+            client_socket.send(bytes(msg, 'utf-8'))
+            return
         else:
             roomname = words[1]
+            # List user's room membership
             if roomname == "mine":
-                msg = 'Rooms user {0} has joined'
+                user = self.clients[client_socket]['data'].decode('utf-8')
+                msg = 'Rooms user {0} has joined:\n'.format(user)
+                for room in self.rooms:
+                    if user in room.room_attrbts['members']:
+                        msg += '{0}\n'.format(room.name)
+                    client_socket.send(bytes(msg, 'utf-8'))
+                    return
+            
+            # List membership and active users of a room
             for _room in self.rooms:
                 if _room.name == roomname:
                     print("Request roomname found..")
-                    msg = 'Users in room {0}: '.format(roomname)
+                    msg = 'User members of room {0}: '.format(roomname)
                     for member in _room.room_attrbts['members']:
                         msg += '{0}, '.format(member)
+                    msg.rstrip(', ')
+                    client_socket.send(bytes(msg, 'utf-8'))
+                    
+                    msg = 'Users active in room: '
+                    for active_user in _room.room_attrbts['active']:
+                        msg += '{0}\n'.format(active_user)
+                    client_socket.send(bytes(msg, 'utf-8'))
+                    return
             if msg == '':
-                raise print('Client passed an invalid room to list members of {0}'.format(roomname))
-        
-        msg.rstrip(',')
-        client_socket.send(bytes(msg, 'utf-8'))
+                msg = 'Client passed an invalid room to list members of {0}\n'.format(roomname)
+                print(msg)
+                client_socket.send(bytes(msg, 'utf-8'))
+                return
 
 
     def handle_enter_room_session(self, lobby_command, client_socket):
         #BIG TODO
+        # if room doesnt have its own socket, set it up and have client join
+        # else have client join existing room socket
         pass
 
 
