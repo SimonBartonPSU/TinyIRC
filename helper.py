@@ -3,7 +3,7 @@ import sys
 import os
 import json
 
-accepted_commands = ["$$create", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$whoami"]
+accepted_commands = ["$$create", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$whoami", "$$send"]
 
 # Validate input client side to save server work
 def interpret_lobby_message(message):
@@ -22,14 +22,15 @@ def interpret_lobby_message(message):
         return None
     elif command == "$$help":
         print("Available commands:")
-        # TODO enter, exit -- the real dealio of joining a room
         print("$$whoami -- Echo your current identity")
         print("$$create [room name] -- Creates a new chat room with specified name")
-        print("$$join [room name] -- Add room to your remembered room list")
-        print("$$leave [room name] -- Remove room from your remembered room list")
-        print("$$list [room name] [mine] -- Without a room name argument, lists available rooms\nwith a room name argument, list users in specified room or rooms you've joined")
-        print("$$enter [room name] -- Enter an active session in a room")
-        print("$$exit -- Exit an active room session\n")
+        # TODO
+        print("$$delete [room name] -- Allows a room Admin to delete a specified room")
+        print("$$join [room name] -- Add yourself to room membership, if possible")
+        print("$$leave [room name] -- Remove yourself from room membership, if possible")
+        print("$$list [room name|mine] -- Without an argument, lists available rooms\nwith an argument, list users in specified room or rooms you've joined")
+        print("$$enter [room name] -- Enter an active session in a room, all messages will be directed to this room")
+        print("$$exit -- Exit an active room session, messages will default to lobby")
         print("$$$end -- Note three dollar signs, this will end the client session entirely\n")
         return None
     elif command in accepted_commands:
@@ -72,7 +73,7 @@ def check_for_config(Client):
         else:
             return False
     except Exception as e:
-        print("Exception occured while loading client config... {0}".format(e))
+        print(f"Exception occured while loading client config... {e}")
 
 def save_config(Client):
         try:
@@ -80,4 +81,4 @@ def save_config(Client):
             with open(path, 'w') as f:
                 json.dump(Client.config, f)
         except Exception as e:
-            print("Error saving config!! {0}".format(e))
+            print(f"Error saving config!! {e}")
