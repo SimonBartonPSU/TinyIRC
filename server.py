@@ -20,7 +20,7 @@ class Room:
     """
     def __init__(self, creator, name='Linux', topic='Default'):
         self.name = name
-        
+
         self.room_attrbts = {'topic' : topic, 
                         'creator': creator,
                         'members': { creator },
@@ -110,12 +110,9 @@ class Server:
                         msg = f"Booting client {self.clients[client]} from server..."
                         self.log_and_send(client, msg)
                         print("Closing socket...")
-                        #client.close()
                         self.sockets_list.remove(client)
                         del self.clients[client]
                         client.shutdown(socket.SHUT_RDWR)
-
-                        
                         print(f"Client {response} booted. Returning to listening...")
                         return
                 trying = input("No matching client found. Try again? [y/n] ")
@@ -164,14 +161,17 @@ class Server:
             return False
 
 
-    def log_and_send(self, client_socket, msg):
-        print(msg)
+    def just_send(self, client_socket, msg):
         msg = msg.encode('utf-8')
         message_header = f"{len(msg):<{HEADER_LENGTH}}".encode('utf-8')
         client_socket.send(message_header + msg)
-        #client_socket.send(bytes(msg, 'utf-8'))
         return
 
+
+    def log_and_send(self, client_socket, msg):
+        print(msg)
+        self.just_send(client_socket, msg)
+    
 
     def handle_conns(self, read_sockets):
         """
@@ -238,7 +238,6 @@ class Server:
                 print("User did not specify roomname to enter")
             elif msg != '':
                 print("Error catching failed ...")
-                client_socket.send(bytes(msg, 'utf-8'))
                 return
 
         if first == "$$create":
@@ -266,7 +265,7 @@ class Server:
         user = self.clients[client_socket]['data'].decode('utf-8')
         print(f'User {user} queried their identity')
         msg = f'You are currently user {user}'
-        client_socket.send(bytes(msg, 'utf-8'))
+        self.log_and_send(client_socket, msg)
 
     def handle_create_room(self, lobby_command, client_socket):
         """
@@ -382,7 +381,7 @@ class Server:
             for room in self.rooms:
                 msg += f'\t\t{room.name}\n'
             
-            client_socket.send(bytes(msg, 'utf-8'))
+            self.just_send(client_socket, msg)
             return
         else:
             # List all rooms and members
@@ -398,7 +397,7 @@ class Server:
                             msg += ' - Admin'
                         msg += '\n'
                     msg += '\n'
-                client_socket.send(bytes(msg, 'utf-8'))
+                self.just_send(client_socket, msg)
                 return
 
             # List user's room membership
@@ -411,7 +410,7 @@ class Server:
                         if user in room.room_attrbts['admins']:
                             msg += ' - Admin'
                         msg += '\n'
-                client_socket.send(bytes(msg, 'utf-8'))
+                self.just_send(client_socket, msg)
                 return
             
             # List membership and active users of a room
@@ -422,12 +421,12 @@ class Server:
                     for member in _room.room_attrbts['members']:
                         msg += f'\t\t{member}\n'
                     msg+= '\n'
-                    client_socket.send(bytes(msg, 'utf-8'))
+                    self.just_send(client_socket, msg)
                     
                     msg = 'Users active in room:\n'
                     for active_user in _room.room_attrbts['active']:
                         msg += f'\t\t{active_user}\n'
-                    client_socket.send(bytes(msg, 'utf-8'))
+                    self.just_send(client_socket, msg)
                     return
             if msg == '':
                 msg = f'Client passed an invalid room to list members of {roomname}\n'
@@ -453,13 +452,13 @@ class Server:
                 for client in self.clients:
                     found_user = self.clients[client]['data'].decode('utf-8')
                     if found_user != user and found_user in room.room_attrbts['members']:
-                        client.send(bytes(msg, 'utf-8'))
+                        self.just_send(client_socket, msg)
                 print(f"Successfully sent message to all members of {sent_name}")
                 return
         msg = f"Could not find room {sent_name} requested by {user}"
         self.log_and_send(client_socket, msg)
         msg = f"format for command is $$send [roomname] message"
-        client.send(bytes(msg, 'utf-8'))
+        self.log_and_send(client_socket, msg)
         return
 
     def handle_enter_room_session(self, lobby_command, client_socket):

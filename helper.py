@@ -8,7 +8,7 @@ import json
 
 accepted_commands = ["$$whoami", "$$create", "$$delete", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$send"]
 
-def interpret_lobby_message(message):
+def interpret_lobby_message(Client, message):
     if len(message) == 0:
         return None
 
@@ -18,7 +18,7 @@ def interpret_lobby_message(message):
     if len(words) > 1:
         room = words[1]
     # not special message
-    if command[:2] != '$$':
+    if command[:2] != '$$' and not Client.is_entered:
         print("Unknown lobby input, please enter a valid command.")
         print("$$help can display available commands.\n")
         #Debugging print(f"We received command {command}\n")

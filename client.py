@@ -93,13 +93,14 @@ class Client:
 
                 ## Handle special or invalid messages before they're even sent
                 if message:
-
-                    client_analysis = interpret_lobby_message(message)
                     if message == "$$$end":
                         end_session(self)
                         self.client_socket.close()
                         sys.exit(0)
-                    elif message == "$$exit":
+
+                    client_analysis = interpret_lobby_message(self, message)
+                    
+                    if message == "$$exit":
                         print(f"Exiting active mode in channel {self.entered_channel}")
                         self.entered = False
                         self.entered_channel = ''
@@ -126,8 +127,7 @@ class Client:
                 while True:
                     msg = self.receive_message()
                     
-                    print(f"Message received is {msg}")
-                    # Lost conn to server
+                    # Booted
                     if msg and msg['data'].decode('utf-8').split()[0] == "Booting":
                         print(f"Message before crash is {msg}")
                         print("Error! Server connection lost...")
@@ -141,7 +141,7 @@ class Client:
                             self.entered = False
                             self.entered_channel = ''
                     if not msg:
-                        co
+                        break
                         
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
@@ -149,9 +149,9 @@ class Client:
                     sys.exit()
                 continue
 
-            #except Exception as e:
-                #print('General error', str(e))
-                #sys.exit
+            except Exception as e:
+                print('General error', str(e))
+                sys.exit
 
 
 c = Client()
