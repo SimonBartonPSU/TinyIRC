@@ -56,40 +56,44 @@ class Client:
                     prompt += self.entered_channel + ' : '
                 message = input(prompt)
 
-            if message:
-                first_word = message.split()[0]
-                if message == "$$$end":
-                    end_session(self)
-                elif first_word == "$$help" or first_word == "$$send":
-                    interpret_lobby_message(message)
-                elif message == "$$exit":
-                    print(f"Exiting active mode in channel {self.entered_channel}")
-                    self.entered = False
-                    self.entered_channel = ''
-                    self.client_socket.send(message)
-                elif (self.entered and message) or interpret_lobby_message(message):
-                    split_message = message.split()
-                    if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
-                        split_message.insert(0, '$$send ' + self.entered_channel)
-                        message = ' '.join(map(str, split_message))
-                    
-                    if split_message[0] == "$$enter":
-                        self.entered = True
-                        _room = split_message[1]
-                        self.entered_channel = _room
-                        print(f"Attempting to enter room {_room}")
+                if message:
+                    first_word = message.split()[0]
+                    if message == "$$$end":
+                        end_session(self)
+                        self.client_socket.close()
+                        sys.exit(0)
+                    elif first_word == "$$help":
+                        interpret_lobby_message(message)
+                    elif message == "$$exit":
+                        print(f"Exiting active mode in channel {self.entered_channel}")
+                        self.entered = False
+                        self.entered_channel = ''
+                        self.client_socket.send(bytes(message, 'utf-8'))
+                    elif (self.entered and message) or interpret_lobby_message(message):
+                        split_message = message.split()
+                        if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
+                            split_message.insert(0, '$$send ' + self.entered_channel)
+                            message = ' '.join(map(str, split_message))
+                        
+                        if split_message[0] == "$$enter":
+                            self.entered = True
+                            _room = split_message[1]
+                            self.entered_channel = _room
+                            print(f"Attempting to enter room {_room}")
 
-                    message = message.encode('utf-8')
-                    message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-                    self.client_socket.send(message_header + message)
-                    time.sleep(0.1)
+                        message = message.encode('utf-8')
+                        message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
+                        self.client_socket.send(message_header + message)
+                        time.sleep(0.1)
                 
             try:
                 while True:
                     data = self.client_socket.recv(1024)
-                    if not data:
+                    if not data or (data.decode('utf-8')).split()[0] == "Booting":
                         print("Error! Server connection lost...")
                         end_session(Client)
+                        self.client_socket.close()
+                        sys.exit(0)
                     recvd = data.decode('utf-8')
                     if recvd:
                         print(recvd)

@@ -14,6 +14,10 @@ CLIENT_NO = 0
 ROOM_NO = 0
 
 class Room:
+    """
+    Core abstraction of this program. Connecting clients want to
+    exchange messages with each other in rooms.
+    """
     def __init__(self, creator, name='Linux', topic='Default'):
         self.name = name
         self.socket = None
@@ -25,13 +29,14 @@ class Room:
 
 class Server:
     def __init__(self):
-        # this is where load file could happen
+        """
+        Funny little chat server that asynchronosly handles client connections
+        and manages a list of Room objects based on user commands.
+        """
         self.pp = pprint.PrettyPrinter(indent=4)
         self.rooms = []
         self.clients = {}
         self.name_list = []
-        # Setup client acceptance over TCP on 127.0.0.1:9001
-        # UDP would be SOCK_DGRAM
         self.server_listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_listen_socket.bind((IP, LISTENING_PORT))
@@ -40,7 +45,9 @@ class Server:
 
         def load_config(self):
             """
-            If a config file exists, load it always on server
+            If a config file exists, load it always on server.
+            Must manually delete config to start clean or 
+            load, make changes and re-save for changes.
             """
             try:
                 path = os.environ.get('HOME') + '/.tinyserver'
@@ -57,7 +64,7 @@ class Server:
 
     def save_config(self):
         """
-        Save server state and print helpful info.
+        Save server room state and print helpful info.
         """
         try:
             print('Saving config...')
@@ -84,23 +91,29 @@ class Server:
         if response.lower() == 'y':
             while trying.lower() == 'y':
                 print("Choose a user to remove:\n")
-                msg = ''
+                user_list = []
                 for client in self.clients:
-                    msg += client['data'] + '\n'
-                print(msg)
+                    user_list.append(self.clients[client]['data'].decode('utf-8'))
+                for user in user_list: print(user)
                 response = input("Enter user to remove: ")
                 for client in self.clients:
-                    if client['data'] == response:
-                        msg = f"Booting client {client['data']} from server..."
+                    if self.clients[client]['data'].decode('utf-8') == response:
+                        msg = f"Booting client {self.clients[client]} from server..."
                         self.log_and_send(client, msg)
+                        print("Closing socket...")
+                        #client.close()
+                        self.sockets_list.remove(client)
                         del self.clients[client]
-                        print("Client booted.")
+                        client.shutdown(socket.SHUT_RDWR)
+
+                        
+                        print(f"Client {response} booted. Returning to listening...")
                         return
                 trying = input("No matching client found. Try again? [y/n] ")
 
         response = input("Save config? [y/n] ")
 
-        if response.lower() == 'y':
+        if response.lower() == 'y' or response == '\n':
             print('Saving config and closing all sockets...')
             for _socket in self.clients:
                 self.pp.pprint(_socket)
@@ -161,21 +174,25 @@ class Server:
             
             # If already a client conn, show lobby
             else:
-                message = self.receive_message(notified_socket)
+                try:
+                    message = self.receive_message(notified_socket)
 
-                # User quits
-                if message is False:
-                    print("Closed connection from {0}".format(self.clients[notified_socket]['data'].decode('utf-8')))
-                    self.sockets_list.remove(notified_socket)
-                    del self.clients[notified_socket]
-                    continue
+                    # User quits
+                    if message is False:
+                        print("Closed connection from {0}".format(self.clients[notified_socket]['data'].decode('utf-8')))
+                        self.sockets_list.remove(notified_socket)
+                        del self.clients[notified_socket]
+                        continue
 
-                print("Accepted returning user: {0}".format(message['data'].decode('utf-8')))
-                # User's socket sent us something in lobby
-                user = self.clients[notified_socket]
-                print("Received message from {0}: {1}".format(user['data'].decode('utf-8'), message['data'].decode('utf-8')))
-                print("Interpreting... {0}".format(message['data']))
-                self.handle_lobby_command(message['data'], notified_socket)
+                    print("Accepted message: {0}".format(message['data'].decode('utf-8')))
+                    # User's socket sent us something in lobby
+                    user = self.clients[notified_socket]
+                    print("Received message from {0}: {1}".format(user['data'].decode('utf-8'), message['data'].decode('utf-8')))
+                    print("Interpreting... {0}".format(message['data']))
+                    self.handle_lobby_command(message['data'], notified_socket)
+                except Exception as e:
+                    print(f"Error handling message from socket {e}")
+                    print("Possibly booted client")
 
 
     def handle_lobby_command(self, lobby_command, client_socket):
@@ -347,9 +364,9 @@ class Server:
                 for room in self.rooms:
                     if user in room.room_attrbts['members']:
                         msg += f'\t\t{room.name}'
-                    if user in room.room_attrbts['admins']:
-                        msg += ' - Admin'
-                    msg += '\n'
+                        if user in room.room_attrbts['admins']:
+                            msg += ' - Admin'
+                        msg += '\n'
                 client_socket.send(bytes(msg, 'utf-8'))
                 return
             

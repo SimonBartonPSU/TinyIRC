@@ -3,9 +3,11 @@ import sys
 import os
 import json
 
+# Helper module that Validates input client side to save server work
+# also handles client config
+
 accepted_commands = ["$$whoami", "$$create", "$$delete", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$send"]
 
-# Validate input client side to save server work
 def interpret_lobby_message(message):
     if len(message) == 0:
         return None
@@ -60,7 +62,7 @@ def end_session(Client):
             os.system('rm ' + path)
         else:
             print("No local config exists to delete.")
-    sys.exit(0)
+    print("Closing client socket and exiting...")
 
 def check_for_config(Client):
     try:
