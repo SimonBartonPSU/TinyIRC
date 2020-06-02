@@ -83,6 +83,60 @@ class Client:
             prompt += self.entered_channel + ' : '
         return input(prompt)
 
+
+    def handle_message_to_send(self, message):
+        if message == "$$$end":
+            end_session(self)
+            self.client_socket.close()
+            sys.exit(0)
+
+        client_analysis = interpret_lobby_message(self, message)
+        
+        if message == "$$exit":
+            print(f"Exiting active mode in channel {self.entered_channel}")
+            self.entered = False
+            self.entered_channel = ''
+            self.send_message(message)
+        elif (self.entered and message) or client_analysis:
+            split_message = message.split()
+            # If user has entered a room, make sure their message is sent to that room
+            # by replacing their input with the $$send command
+            if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
+                split_message.insert(0, '$$send ' + self.entered_channel)
+                message = ' '.join(map(str, split_message))
+            
+            if split_message[0] == "$$enter":
+                self.entered = True
+                _room = split_message[1]
+                self.entered_channel = _room
+                print(f"Attempting to enter room {_room}")
+
+            self.send_message(message)
+            # Sleep slightly to allow IO
+            time.sleep(0.1)
+
+
+    def check_socket(self):
+        while True:
+            msg = self.receive_message()
+            
+            # Booted
+            if msg and msg['data'].decode('utf-8').split()[0] == "Booting":
+                print(f"Message before crash is {msg}")
+                print("Error! Server connection lost...")
+                end_session(self)
+                self.client_socket.close()
+                sys.exit(0)
+            if msg:
+                recvd = msg['data'].decode('utf-8')
+                print(recvd)
+                if recvd.split()[-1] == "NONACTIVE":
+                    self.entered = False
+                    self.entered_channel = ''
+            if not msg:
+                break
+
+
     def run(self):
         """
         Main routine, message processing
@@ -91,66 +145,21 @@ class Client:
         lobby_welcome()
         while True:
             message = self.get_input()
-
             if message:
-                if message == "$$$end":
-                    end_session(self)
-                    self.client_socket.close()
-                    sys.exit(0)
-
-                client_analysis = interpret_lobby_message(self, message)
-                
-                if message == "$$exit":
-                    print(f"Exiting active mode in channel {self.entered_channel}")
-                    self.entered = False
-                    self.entered_channel = ''
-                    self.send_message(message)
-                elif (self.entered and message) or client_analysis:
-                    split_message = message.split()
-                    # If user has entered a room, make sure their message is sent to that room
-                    # by replacing their input with the $$send command
-                    if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
-                        split_message.insert(0, '$$send ' + self.entered_channel)
-                        message = ' '.join(map(str, split_message))
-                    
-                    if split_message[0] == "$$enter":
-                        self.entered = True
-                        _room = split_message[1]
-                        self.entered_channel = _room
-                        print(f"Attempting to enter room {_room}")
-
-                    self.send_message(message)
-                    time.sleep(0.1)
+                self.handle_message_to_send(message)
                 
             try:
-                while True:
-                    msg = self.receive_message()
-                    
-                    # Booted
-                    if msg and msg['data'].decode('utf-8').split()[0] == "Booting":
-                        print(f"Message before crash is {msg}")
-                        print("Error! Server connection lost...")
-                        end_session(Client)
-                        self.client_socket.close()
-                        sys.exit(0)
-                    if msg:
-                        recvd = msg['data'].decode('utf-8')
-                        print(recvd)
-                        if recvd.split()[-1] == "NONACTIVE":
-                            self.entered = False
-                            self.entered_channel = ''
-                    if not msg:
-                        break
+                self.check_socket()
                         
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
                     print('Reading error', str(e))
-                    sys.exit()
+                    end_session(self)
                 continue
 
             except Exception as e:
                 print('General error', str(e))
-                sys.exit
+                end_session(self)
 
 
 c = Client()

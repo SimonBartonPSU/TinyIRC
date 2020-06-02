@@ -173,47 +173,54 @@ class Server:
         self.just_send(client_socket, msg)
     
 
+    def handle_new_conn(self):
+        self.latest_client_socket, self.latest_client_address = self.server_listen_socket.accept()
+        print("Accepted new connection from {0}:{1}".format(self.latest_client_address[0], self.latest_client_address[1]))
+        user = self.receive_message(self.latest_client_socket)
+        if user is False:
+            return False
+
+        self.sockets_list.append(self.latest_client_socket)
+        self.clients[self.latest_client_socket] = user
+        print("Accepted new user: {0}".format(user['data'].decode('utf-8')))
+        return True
+
+    
+    def handle_existing_conn(self, notified_socket):
+        message = self.receive_message(notified_socket)
+        print(f"We received message {message}")
+
+        # User quits
+        if message is False:
+            print("Closed connection from {0}".format(self.clients[notified_socket]['data'].decode('utf-8')))
+            self.sockets_list.remove(notified_socket)
+            del self.clients[notified_socket]
+            return False
+        
+        # User's socket sent us something in lobby
+        user = self.clients[notified_socket]
+        print("Received message from {0}: {1}".format(user['data'].decode('utf-8'), message['data'].decode('utf-8')))
+        print("Interpreting... {0}".format(message['data']))
+        self.handle_lobby_command(message['data'], notified_socket)
+        return True
+
+
     def handle_conns(self, read_sockets):
         """
         Main messaging processing method
         """
         for notified_socket in read_sockets:
             print("Checking sockets...")
-            # Accept and handle new clients on TCP 9001
             if notified_socket == self.server_listen_socket:
-                self.latest_client_socket, self.latest_client_address = self.server_listen_socket.accept()
-                print("Accepted new connection from {0}:{1}".format(self.latest_client_address[0], self.latest_client_address[1]))
-                user = self.receive_message(self.latest_client_socket)
-                if user is False:
+                if not self.handle_new_conn():
                     continue
-
-                self.sockets_list.append(self.latest_client_socket)
-                self.clients[self.latest_client_socket] = user
-
-                print("Accepted new user: {0}".format(user['data'].decode('utf-8')))
             
-            # If already a client conn, show lobby
             else:
                 try:
-                    message = self.receive_message(notified_socket)
-                    print(f"We received message {message}")
-
-                    # User quits
-                    if message is False:
-                        print("Closed connection from {0}".format(self.clients[notified_socket]['data'].decode('utf-8')))
-                        self.sockets_list.remove(notified_socket)
-                        del self.clients[notified_socket]
+                    if not self.handle_existing_conn(notified_socket):
                         continue
-
-                    print("Accepted message: {0}".format(message['data'].decode('utf-8')))
-                    # User's socket sent us something in lobby
-                    user = self.clients[notified_socket]
-                    print("Received message from {0}: {1}".format(user['data'].decode('utf-8'), message['data'].decode('utf-8')))
-                    print("Interpreting... {0}".format(message['data']))
-                    self.handle_lobby_command(message['data'], notified_socket)
                 except Exception as e:
                     print(f"Error handling message from socket {e}")
-                    print("Possibly booted client")
 
 
     def handle_lobby_command(self, lobby_command, client_socket):
@@ -442,20 +449,20 @@ class Server:
         """
         words = lobby_command.split()
         sent_name = words[1]
-        user = self.clients[client_socket]['data'].decode('utf-8')
+        sending_user = self.clients[client_socket]['data'].decode('utf-8')
         for room in self.rooms:
             if room.name == sent_name:
                 actual_words = words[2:]
                 actual_words = ' '.join(actual_words)
                 actual_words += '\n'
-                msg = f"[{sent_name}] {user}: {actual_words}"
+                msg = f"[{sent_name}] {sending_user}: {actual_words}"
                 for client in self.clients:
                     found_user = self.clients[client]['data'].decode('utf-8')
-                    if found_user != user and found_user in room.room_attrbts['members']:
-                        self.just_send(client_socket, msg)
+                    if found_user in room.room_attrbts['members'] and found_user != sending_user:
+                        self.log_and_send(client, msg)
                 print(f"Successfully sent message to all members of {sent_name}")
                 return
-        msg = f"Could not find room {sent_name} requested by {user}"
+        msg = f"Could not find room {sent_name} requested by {sending_user}"
         self.log_and_send(client_socket, msg)
         msg = f"format for command is $$send [roomname] message"
         self.log_and_send(client_socket, msg)

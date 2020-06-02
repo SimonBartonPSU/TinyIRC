@@ -35,13 +35,14 @@ def interpret_lobby_message(Client, message):
         print("$$exit -- Exit an active room session, messages will default to lobby")
         print("$$$end -- Note three dollar signs, this will end the client session entirely\n")
         return None
-    elif command in accepted_commands:
+    elif command in accepted_commands or Client.entered:
         if command == "$$create":
             if len(room) > 48 or not room.isalpha():
                 print("Invalid! Room names must be 48 characters or less and alphabetical")
         return True
     else:
         print("Hmmm, you were close to a valid command with $$, are you sure this wasn't a typo?\n")
+        print(f"We got {message}")
         return None
 
 def lobby_welcome():
