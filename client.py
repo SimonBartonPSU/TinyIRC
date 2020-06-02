@@ -42,6 +42,12 @@ class Client:
         print('You pressed Ctrl+C! Config will not be saved!')
         sys.exit(0)
 
+    def send_message(self, message):
+        message = message.encode('utf-8')
+        # Send message length
+        message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
+        self.client_socket.send(message_header + message)
+
 
     def run(self):
         # Tell server our username len
@@ -68,9 +74,10 @@ class Client:
                         print(f"Exiting active mode in channel {self.entered_channel}")
                         self.entered = False
                         self.entered_channel = ''
-                        self.client_socket.send(bytes(message, 'utf-8'))
+                        self.send_message(message)
                     elif (self.entered and message) or interpret_lobby_message(message):
                         split_message = message.split()
+                        # If user has entered a room, change how the message is displayed
                         if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
                             split_message.insert(0, '$$send ' + self.entered_channel)
                             message = ' '.join(map(str, split_message))
@@ -81,14 +88,13 @@ class Client:
                             self.entered_channel = _room
                             print(f"Attempting to enter room {_room}")
 
-                        message = message.encode('utf-8')
-                        message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-                        self.client_socket.send(message_header + message)
+                        self.send_message(message)
                         time.sleep(0.1)
                 
             try:
                 while True:
                     data = self.client_socket.recv(1024)
+                    # Lost conn to server
                     if not data or (data.decode('utf-8')).split()[0] == "Booting":
                         print("Error! Server connection lost...")
                         end_session(Client)

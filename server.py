@@ -64,7 +64,7 @@ class Server:
 
     def save_config(self):
         """
-        Save server room state and print helpful info.
+        Save and print server room state.
         """
         try:
             print("Clearing active users")
@@ -86,12 +86,18 @@ class Server:
 
     def signal_handler(self, sig, frame):
         """
-        Save state on interrupt crash and cleanup sockets
+        Save state, allow server operator to kick, or shutdown server
+        on CTRL+C signal.
         """
         print('You pressed Ctrl+C!')
         response = input("Would you like to terminate a user session? [y/n] ")
-        trying = 'y'
+        if response.lower() == 'exit':
+            print("fast exiting..")
+            sys.exit(0)
+
+
         if response.lower() == 'y':
+            trying = 'y'
             while trying.lower() == 'y':
                 print("Choose a user to remove:\n")
                 user_list = []
@@ -130,6 +136,9 @@ class Server:
 
 
     def handle_exceptions(self, exception_sockets):
+        """
+        For now if a client socket has errored, simply drop it
+        """
         for notified_socket in exception_sockets:
             print("Dropping socket {0} due to exception".format(repr(notified_socket)))
             self.sockets_list.remove(notified_socket)
@@ -139,6 +148,8 @@ class Server:
     def receive_message(self, client_socket):
         """
         Receive a message from a client socket
+        First interprets the header of 10 bytes,
+        which is telling the server the length of the actual message
         """
         try:
             message_header = client_socket.recv(HEADER_LENGTH)
@@ -160,6 +171,9 @@ class Server:
 
 
     def handle_conns(self, read_sockets):
+        """
+        Main messaging processing method
+        """
         for notified_socket in read_sockets:
             print("Checking sockets...")
             # Accept and handle new clients on TCP 9001
@@ -179,6 +193,7 @@ class Server:
             else:
                 try:
                     message = self.receive_message(notified_socket)
+                    print(f"We received message {message}")
 
                     # User quits
                     if message is False:
@@ -215,10 +230,11 @@ class Server:
             elif first == "$$join" or first == "$$leave":
                 msg = "Must specify a room name argument to execute $$join or $$leave! [E.g. $$join pokemon]"
                 print("User did not specify roomname to join or leave")
-            elif first == "$$enter" or first == "$$exit":
-                msg = "Must specify a room name argument to execute $$enter or $$exit! [E.g. $$enter pokemon]"
+            elif first == "$$enter":
+                msg = "Must specify a room name argument to execute $$enter! [E.g. $$enter pokemon]"
                 print("User did not specify roomname to enter")
             elif msg != '':
+                print("Error catching failed ...")
                 client_socket.send(bytes(msg, 'utf-8'))
                 return
 
@@ -410,7 +426,7 @@ class Server:
                 msg = f"[{sent_name}] {user}: {actual_words}"
                 for client in self.clients:
                     found_user = self.clients[client]['data'].decode('utf-8')
-                    if found_user is not user and found_user in room.room_attrbts['members']:
+                    if found_user != user and found_user in room.room_attrbts['members']:
                         client.send(bytes(msg, 'utf-8'))
                 print(f"Successfully sent message to all members of {sent_name}")
                 return
@@ -435,16 +451,14 @@ class Server:
         return
 
     def handle_exit_room_session(self, lobby_command, client_socket):
-        words = lobby_command.split()
-        sent_name = words[1]
         user = self.clients[client_socket]['data'].decode('utf-8')
         for room in self.rooms:
-            if room.name == sent_name and user in room.room_attrbts['active']:
+            if user in room.room_attrbts['active']:
                 room.room_attrbts['active'].remove(user)
-                msg = f'User {user} is no longer active in room {sent_name}.'
+                msg = f'User {user} is no longer active in room {room.name}.'
                 print(msg)
                 return
-        msg = f'Room {sent_name} not found or user {user} is not yet a member. NONACTIVE'
+        msg = f'Room {room.name} not found or user {user} is not yet a member. NONACTIVE'
         self.log_and_send(client_socket, msg)
         return
 
