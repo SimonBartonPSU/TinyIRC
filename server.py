@@ -67,6 +67,9 @@ class Server:
         Save server room state and print helpful info.
         """
         try:
+            print("Clearing active users")
+            for room in self.rooms:
+                room.room_attrbts['active'].clear()
             print('Saving config...')
             print("Known clients:")
             self.pp.pprint(self.clients)
@@ -406,7 +409,8 @@ class Server:
                 actual_words += '\n'
                 msg = f"[{sent_name}] {user}: {actual_words}"
                 for client in self.clients:
-                    if self.clients[client]['data'].decode('utf-8') in room.room_attrbts['members']:
+                    found_user = self.clients[client]['data'].decode('utf-8')
+                    if found_user is not user and found_user in room.room_attrbts['members']:
                         client.send(bytes(msg, 'utf-8'))
                 print(f"Successfully sent message to all members of {sent_name}")
                 return
