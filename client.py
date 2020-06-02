@@ -14,10 +14,16 @@ HEADER_LENGTH = 10
 IP = "127.0.0.1"
 CONNECTION_PORT = 9001
 
-class Client: 
+class Client:
+    """
+    TinyIRC client
+    Establishes a TCP connection with server at specified IP and
+    port 9001. Then sends messages and commands to the server after
+    connection has been established.
+    """
     def __init__(self):
         self.pp = pprint.PrettyPrinter(indent=4)
-        # Setup connection
+
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((IP, CONNECTION_PORT))
         self.client_socket.setblocking(False)
@@ -27,7 +33,7 @@ class Client:
         self.ticker = 0
         self.config = {'username':'','rooms':[]}
 
-        # Look for config, or setup username if no config
+
         if check_for_config(self):
             print("Config file detected and loaded successfully. Welcome back, {0}".format(self.username))
         else:
@@ -43,17 +49,40 @@ class Client:
         sys.exit(0)
 
     def send_message(self, message):
+        """
+        Basic send message mechanism. Allows client to send
+        a fixed 10-byte header that contains the length of the
+        following payload message.
+        """
         message = message.encode('utf-8')
-        # Send message length
-        message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-        self.client_socket.send(message_header + message)
+        header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
+        self.client_socket.send(header + message)
+
+
+    def receive_message(self):
+        """
+        Receive a message from a server socket
+        First interprets the header of 10 bytes,
+        which is telling the server the length of the following message
+        """
+        try:
+            message_header = self.client_socket.recv(HEADER_LENGTH)
+
+            if not len(message_header):
+                return False
+
+            message_length = int(message_header.decode("utf-8").strip())
+            return {"header": message_header, "data":self.client_socket.recv(message_length)}
+
+        except:
+            return False
 
 
     def run(self):
-        # Tell server our username len
-        username_header = f"{len(self.username):<{HEADER_LENGTH}}"
-        msg = username_header + self.username.decode('utf-8')
-        self.client_socket.send(bytes(msg, 'utf-8'))
+        """
+        Main routine, message processing
+        """
+        self.send_message(self.username.decode('utf-8'))
         lobby_welcome()
         while True:
             if self.ticker % 2 == 0:
@@ -62,22 +91,23 @@ class Client:
                     prompt += self.entered_channel + ' : '
                 message = input(prompt)
 
+                ## Handle special or invalid messages before they're even sent
                 if message:
-                    first_word = message.split()[0]
+
+                    client_analysis = interpret_lobby_message(message)
                     if message == "$$$end":
                         end_session(self)
                         self.client_socket.close()
                         sys.exit(0)
-                    elif first_word == "$$help":
-                        interpret_lobby_message(message)
                     elif message == "$$exit":
                         print(f"Exiting active mode in channel {self.entered_channel}")
                         self.entered = False
                         self.entered_channel = ''
                         self.send_message(message)
-                    elif (self.entered and message) or interpret_lobby_message(message):
+                    elif (self.entered and message) or client_analysis:
                         split_message = message.split()
-                        # If user has entered a room, change how the message is displayed
+                        # If user has entered a room, make sure their message is sent to that room
+                        # by replacing their input with the $$send command
                         if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
                             split_message.insert(0, '$$send ' + self.entered_channel)
                             message = ' '.join(map(str, split_message))
@@ -90,33 +120,38 @@ class Client:
 
                         self.send_message(message)
                         time.sleep(0.1)
+            self.ticker += 1
                 
             try:
                 while True:
-                    data = self.client_socket.recv(1024)
+                    msg = self.receive_message()
+                    
+                    print(f"Message received is {msg}")
                     # Lost conn to server
-                    if not data or (data.decode('utf-8')).split()[0] == "Booting":
+                    if msg and msg['data'].decode('utf-8').split()[0] == "Booting":
+                        print(f"Message before crash is {msg}")
                         print("Error! Server connection lost...")
                         end_session(Client)
                         self.client_socket.close()
                         sys.exit(0)
-                    recvd = data.decode('utf-8')
-                    if recvd:
+                    if msg:
+                        recvd = msg['data'].decode('utf-8')
                         print(recvd)
                         if recvd.split()[-1] == "NONACTIVE":
                             self.entered = False
                             self.entered_channel = ''
-                self.ticker += 1
-                    
+                    if not msg:
+                        co
+                        
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
                     print('Reading error', str(e))
                     sys.exit()
                 continue
 
-            except Exception as e:
-                print('General error', str(e))
-                sys.exit
+            #except Exception as e:
+                #print('General error', str(e))
+                #sys.exit
 
 
 c = Client()

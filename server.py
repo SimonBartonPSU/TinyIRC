@@ -20,7 +20,7 @@ class Room:
     """
     def __init__(self, creator, name='Linux', topic='Default'):
         self.name = name
-        self.socket = None
+        
         self.room_attrbts = {'topic' : topic, 
                         'creator': creator,
                         'members': { creator },
@@ -30,7 +30,7 @@ class Room:
 class Server:
     def __init__(self):
         """
-        Funny little chat server that asynchronosly handles client connections
+        TinyIRC chat server that asynchronosly handles client connections
         and manages a list of Room objects based on user commands.
         """
         self.pp = pprint.PrettyPrinter(indent=4)
@@ -149,7 +149,7 @@ class Server:
         """
         Receive a message from a client socket
         First interprets the header of 10 bytes,
-        which is telling the server the length of the actual message
+        which is telling the server the length of the following message
         """
         try:
             message_header = client_socket.recv(HEADER_LENGTH)
@@ -166,7 +166,10 @@ class Server:
 
     def log_and_send(self, client_socket, msg):
         print(msg)
-        client_socket.send(bytes(msg, 'utf-8'))
+        msg = msg.encode('utf-8')
+        message_header = f"{len(msg):<{HEADER_LENGTH}}".encode('utf-8')
+        client_socket.send(message_header + msg)
+        #client_socket.send(bytes(msg, 'utf-8'))
         return
 
 
@@ -266,13 +269,17 @@ class Server:
         client_socket.send(bytes(msg, 'utf-8'))
 
     def handle_create_room(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$create [roomname]'
+        Room must not already exist or use a reserved word: mine or all
+        """
         msg = "Handling room creation of {0}".format(lobby_command)
         print(msg)
         user = self.clients[client_socket]['data'].decode('utf-8')
         roomname = lobby_command.split()[1]
 
-        if roomname == "mine":
-            msg = f'Client {user} error! "mine" is a reserved word that cannot be a room name.'
+        if roomname == "mine" or roomname == "all":
+            msg = f'Client {user} error! reserved word that cannot be a room name.'
             self.log_and_send(client_socket, msg)
             return
 
@@ -289,6 +296,10 @@ class Server:
     
 
     def handle_delete_room(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$delete [roomname]'
+        Only admins can delete rooms. There is no second confirmation.
+        """
         user = self.clients[client_socket]['data'].decode('utf-8')
         roomname = lobby_command.split()[1]
         msg = f"Handling room deletion of {roomname} by {user}"
@@ -305,6 +316,10 @@ class Server:
 
 
     def handle_join_room(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$join [roomname]'
+        Client can only join a room if they have haven't already joined and passed a valid roomname.
+        """
         user = self.clients[client_socket]['data'].decode('utf-8')
         words = lobby_command.split()
         roomname = words[1]
@@ -327,6 +342,10 @@ class Server:
 
 
     def handle_leave_room(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$leave [roomname]'
+        Client can only leave a room if they have actually joined and passed a valid roomname.
+        """
         user = self.clients[client_socket]['data'].decode('utf-8')
         words = lobby_command.split()
         roomname = words[1]
@@ -349,6 +368,11 @@ class Server:
 
 
     def handle_list_room(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$list (roomname|all|mine)'
+        User is able to list all rooms, members of a specific room,
+        all rooms and members, and their own membership in rooms.
+        """
         print("Handling list command...")
         msg = ''
         words = lobby_command.split()
@@ -357,6 +381,7 @@ class Server:
             msg = 'Available Rooms:\n'
             for room in self.rooms:
                 msg += f'\t\t{room.name}\n'
+            
             client_socket.send(bytes(msg, 'utf-8'))
             return
         else:
@@ -411,6 +436,7 @@ class Server:
     
     def handle_send_to_room(self, lobby_command, client_socket):
         """
+        Handles command of the form '$$send [roomname] "msg"
         Fundamental algorithm for distributing messages to other clients.
         Look for the matching room, then send the message to any users who
         are members of that room.
