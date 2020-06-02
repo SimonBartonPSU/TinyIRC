@@ -77,6 +77,11 @@ class Client:
         except:
             return False
 
+    def get_input(self):
+        prompt = f"{self.username.decode('utf-8')} > "
+        if self.entered:
+            prompt += self.entered_channel + ' : '
+        return input(prompt)
 
     def run(self):
         """
@@ -85,43 +90,37 @@ class Client:
         self.send_message(self.username.decode('utf-8'))
         lobby_welcome()
         while True:
-            if self.ticker % 2 == 0:
-                prompt = f"{self.username.decode('utf-8')} > "
-                if self.entered:
-                    prompt += self.entered_channel + ' : '
-                message = input(prompt)
+            message = self.get_input()
 
-                ## Handle special or invalid messages before they're even sent
-                if message:
-                    if message == "$$$end":
-                        end_session(self)
-                        self.client_socket.close()
-                        sys.exit(0)
+            if message:
+                if message == "$$$end":
+                    end_session(self)
+                    self.client_socket.close()
+                    sys.exit(0)
 
-                    client_analysis = interpret_lobby_message(self, message)
+                client_analysis = interpret_lobby_message(self, message)
+                
+                if message == "$$exit":
+                    print(f"Exiting active mode in channel {self.entered_channel}")
+                    self.entered = False
+                    self.entered_channel = ''
+                    self.send_message(message)
+                elif (self.entered and message) or client_analysis:
+                    split_message = message.split()
+                    # If user has entered a room, make sure their message is sent to that room
+                    # by replacing their input with the $$send command
+                    if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
+                        split_message.insert(0, '$$send ' + self.entered_channel)
+                        message = ' '.join(map(str, split_message))
                     
-                    if message == "$$exit":
-                        print(f"Exiting active mode in channel {self.entered_channel}")
-                        self.entered = False
-                        self.entered_channel = ''
-                        self.send_message(message)
-                    elif (self.entered and message) or client_analysis:
-                        split_message = message.split()
-                        # If user has entered a room, make sure their message is sent to that room
-                        # by replacing their input with the $$send command
-                        if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
-                            split_message.insert(0, '$$send ' + self.entered_channel)
-                            message = ' '.join(map(str, split_message))
-                        
-                        if split_message[0] == "$$enter":
-                            self.entered = True
-                            _room = split_message[1]
-                            self.entered_channel = _room
-                            print(f"Attempting to enter room {_room}")
+                    if split_message[0] == "$$enter":
+                        self.entered = True
+                        _room = split_message[1]
+                        self.entered_channel = _room
+                        print(f"Attempting to enter room {_room}")
 
-                        self.send_message(message)
-                        time.sleep(0.1)
-            self.ticker += 1
+                    self.send_message(message)
+                    time.sleep(0.1)
                 
             try:
                 while True:

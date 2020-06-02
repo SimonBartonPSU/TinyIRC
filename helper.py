@@ -18,7 +18,7 @@ def interpret_lobby_message(Client, message):
     if len(words) > 1:
         room = words[1]
     # not special message
-    if command[:2] != '$$' and not Client.is_entered:
+    if command[:2] != '$$' and not Client.entered:
         print("Unknown lobby input, please enter a valid command.")
         print("$$help can display available commands.\n")
         #Debugging print(f"We received command {command}\n")
