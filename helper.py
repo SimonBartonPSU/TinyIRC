@@ -33,6 +33,7 @@ def interpret_lobby_message(Client, message):
         print("$$list [room name|mine|all] -- Without an argument, lists available rooms\nwith an argument, list users in specified room or \nrooms you've joined or all rooms with members")
         print("$$enter [room name] -- Enter an active session in a room, all messages will be directed to this room")
         print("$$exit -- Exit an active room session, messages will default to lobby")
+        print("$$send [room name] (message) -- Send a message to a specific room")
         print("$$$end -- Note three dollar signs, this will end the client session entirely\n")
         return None
     elif command in accepted_commands or Client.entered:
