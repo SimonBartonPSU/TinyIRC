@@ -122,8 +122,7 @@ class Client:
             
             # Booted
             if msg and msg['data'].decode('utf-8').split()[0] == "Booting":
-                print(f"Message before crash is {msg}")
-                print("Error! Server connection lost...")
+                print("Error! Server connection lost... Booted")
                 end_session(self)
                 self.client_socket.close()
                 sys.exit(0)
