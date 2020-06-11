@@ -30,6 +30,13 @@ class Server:
         """
         TinyIRC chat server that asynchronosly handles client connections
         and manages a list of Room objects based on user commands.
+
+        User connctions are managed with a dictionary of sockets.
+        Commands are received and interpreted and an appropriate action is taken by the server.
+        This includes: broadcasting a message to members of a room, 
+                        echoing information back to a client,
+                        changing the state of the room list and echoing success to client.
+
         """
         self.pp = pprint.PrettyPrinter(indent=4)
         self.rooms = []
@@ -62,7 +69,7 @@ class Server:
 
     def save_config(self):
         """
-        Save and print server room state.
+        Save server room state as a json file and print it.
         """
         try:
             print("Clearing active users")
@@ -84,8 +91,9 @@ class Server:
 
     def signal_handler(self, sig, frame):
         """
-        Save state, allow server operator to kick, or shutdown server
-        on CTRL+C signal.
+        Allows server to boot a naughty user.
+        Also allows option to save server config.
+        Additionally, can continue server operator or shutdown.
         """
         print('You pressed Ctrl+C!')
         response = input("Would you like to terminate a user session? [y/n] ")
@@ -160,6 +168,9 @@ class Server:
 
 
     def just_send(self, client_socket, msg):
+        """
+        Send 10 utf-8 bytes as a header representing length of following message in utf-8 bytes.
+        """
         msg = msg.encode('utf-8')
         message_header = f"{len(msg):<{HEADER_LENGTH}}".encode('utf-8')
         client_socket.send(message_header + msg)
@@ -172,6 +183,11 @@ class Server:
     
 
     def handle_new_conn(self):
+        """
+        Upon receiving a new connection on Port 9001 accept and allocate a new connection socket.
+
+        Make sure the message was parsed correctly, then add the new private socket to server state.
+        """
         self.latest_client_socket, self.latest_client_address = self.server_listen_socket.accept()
         print("Accepted new connection from {0}:{1}".format(self.latest_client_address[0], self.latest_client_address[1]))
         user = self.receive_message(self.latest_client_socket)
@@ -185,6 +201,13 @@ class Server:
 
     
     def handle_existing_conn(self, notified_socket):
+        """
+        Upon receiving a message from any port that is not 9001,
+        validate that the user did not quit. Afterwards receive the message,
+        and send to the parent handler, which will route to appropriate
+        command handler.
+        """
+
         message = self.receive_message(notified_socket)
         print(f"We received message {message}")
 
@@ -206,6 +229,8 @@ class Server:
     def handle_conns(self, read_sockets):
         """
         Main messaging processing method
+        If the message is from 9001, it's a new client talking.
+        Otherwise, it's one of our existing users!
         """
         for notified_socket in read_sockets:
             print("Checking sockets...")
@@ -222,6 +247,12 @@ class Server:
 
 
     def handle_lobby_command(self, lobby_command, client_socket):
+        """
+        Parent command handler funtion.
+
+        Perform a secondary filtering and validation check on client command.
+        Interpret the type of command and send it to the appropriate sub-handler.
+        """
         lobby_command = lobby_command.decode('utf-8')
         words = lobby_command.split()
         first = words[0]
@@ -267,6 +298,9 @@ class Server:
             print("Not sure how this lobby command got to server. Should have been filtered by client filter")
 
     def handle_whoami(self, client_socket):
+        """
+        Easy messaging sanity check.
+        """
         user = self.clients[client_socket]['data'].decode('utf-8')
         print(f'User {user} queried their identity')
         msg = f'You are currently user {user}'
@@ -276,6 +310,11 @@ class Server:
         """
         Handles command of the form '$$create [roomname]'
         Room must not already exist or use a reserved word: mine or all
+
+        The creator of a room is the default admin.
+
+        TODO BUG: room is still created if non-alpha, but client is told
+        that operation failed!!
         """
         msg = "Handling room creation of {0}".format(lobby_command)
         print(msg)
@@ -303,6 +342,7 @@ class Server:
         """
         Handles command of the form '$$delete [roomname]'
         Only admins can delete rooms. There is no second confirmation.
+        Other users are silently dropped from the room.
         """
         user = self.clients[client_socket]['data'].decode('utf-8')
         roomname = lobby_command.split()[1]
@@ -376,6 +416,8 @@ class Server:
         Handles command of the form '$$list (roomname|all|mine)'
         User is able to list all rooms, members of a specific room,
         all rooms and members, and their own membership in rooms.
+
+        Build a big string and send it on back!
         """
         print("Handling list command...")
         msg = ''
@@ -441,9 +483,12 @@ class Server:
     def handle_send_to_room(self, lobby_command, client_socket):
         """
         Handles command of the form '$$send [roomname] "msg"
+
         Fundamental algorithm for distributing messages to other clients.
         Look for the matching room, then send the message to any users who
         are members of that room.
+
+        Not ideal performance to be sure.
         """
         words = lobby_command.split()
         sent_name = words[1]
@@ -467,6 +512,13 @@ class Server:
         return
 
     def handle_enter_room_session(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$enter [roomname]'
+
+        User may only enter a room if they have already joined that room.
+        The ACTIVE and NONACTIVE strings are interpreted on the client sides as messages indicating
+        their change in 'entered' state.
+        """
         words = lobby_command.split()
         sent_name = words[1]
         user = self.clients[client_socket]['data'].decode('utf-8')
@@ -481,6 +533,13 @@ class Server:
         return
 
     def handle_exit_room_session(self, lobby_command, client_socket):
+        """
+        Handles command of the form '$$exit'
+
+        User may only exit if they are entered into a room.
+        The NONACTIVE string is interpreted on the client sides as indicating
+        their change in 'entered' state.
+        """
         user = self.clients[client_socket]['data'].decode('utf-8')
         for room in self.rooms:
             if user in room.room_attrbts['active']:
@@ -493,6 +552,10 @@ class Server:
         return
 
     def run(self):
+        """
+        Forever:
+                Listen for connections with select, handle connections and handle errors
+        """
         print("Central server now listening...")
         while True:
             read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list)

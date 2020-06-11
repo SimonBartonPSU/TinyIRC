@@ -51,7 +51,7 @@ class Client:
     def send_message(self, message):
         """
         Basic send message mechanism. Allows client to send
-        a fixed 10-byte header that contains the length of the
+        a fixed 10 utf-8 byte header that contains the length of the
         following payload message.
         """
         message = message.encode('utf-8')
