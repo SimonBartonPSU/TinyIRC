@@ -9,6 +9,9 @@ import json
 accepted_commands = ["$$whoami", "$$create", "$$delete", "$$join", "$$leave", "$$list", "$$enter", "$$exit", "$$send"]
 
 def interpret_lobby_message(Client, message):
+    """
+    Filter invalid client messages and validate accepted commands.
+    """
     if len(message) == 0:
         return None
 
@@ -50,6 +53,11 @@ def lobby_welcome():
     print("Welcome back to your lobby. Enter a valid $$ command or $$help if you need help.\n")
 
 def end_session(Client):
+    """
+    Allow client the opportunity to save their configuration.
+
+    Right now this simply consists of a username.
+    """
     r = input('Would you like to save local config? [y/n] ')
     if r.lower() == 'y':
         print("Saving config for current user...")
@@ -67,6 +75,9 @@ def end_session(Client):
     print("Closing client socket and exiting...")
 
 def check_for_config(Client):
+    """
+    Look for a config file and if found, load for client.
+    """
     try:
         path = os.environ.get('HOME') + '/.tiny'
         if os.path.exists(path):
@@ -80,6 +91,9 @@ def check_for_config(Client):
         print(f"Exception occured while loading client config... {e}")
 
 def save_config(Client):
+        """
+        Dump the client config attribute into a json file.
+        """
         try:
             path = os.environ.get('HOME') + '/.tiny'
             with open(path, 'w') as f:

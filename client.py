@@ -85,6 +85,12 @@ class Client:
 
 
     def handle_message_to_send(self, message):
+        """
+        Interpret a client message and send to server, if validated.
+
+        Funky elif code relates to the automatic management of client messages
+        when 'joined' to a room.
+        """
         if message == "$$$end":
             end_session(self)
             self.client_socket.close()
@@ -99,8 +105,6 @@ class Client:
             self.send_message(message)
         elif (self.entered and message) or client_analysis:
             split_message = message.split()
-            # If user has entered a room, make sure their message is sent to that room
-            # by replacing their input with the $$send command
             if self.entered and split_message[0:1] is not ['$$send', str(self.entered_channel)]:
                 split_message.insert(0, '$$send ' + self.entered_channel)
                 message = ' '.join(map(str, split_message))
@@ -117,6 +121,11 @@ class Client:
 
 
     def check_socket(self):
+        """
+        Client checks it's private socket with server for a message.
+        Make sure it's not a Boot message. Check if it's a message
+        indicating client has 'exited' a room.
+        """
         while True:
             msg = self.receive_message()
             
@@ -133,12 +142,23 @@ class Client:
                     self.entered = False
                     self.entered_channel = ''
             if not msg:
+                # I believe this is what's broken and causing
+                # 'client gracefully handles server crash' to fail.
+                # Problems with my ticker strategy to imitate immediate I/O though.
+                # Probably need a functional GUI to handle this best.
                 break
 
 
     def run(self):
         """
         Main routine, message processing
+        Establish a connection with server by sending username.
+
+        Then forever:
+                Get client input
+                Handle the input (or lack thereof)
+                Check for a response
+                Catch errors
         """
         self.send_message(self.username.decode('utf-8'))
         lobby_welcome()
